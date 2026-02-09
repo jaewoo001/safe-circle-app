@@ -1,8 +1,8 @@
 "use client";
-
+// @ts-ignore
+import { HeatmapLayer } from "react-leaflet-heatmap-layer-v3";
 import { useState, useEffect } from "react";
 import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from "react-leaflet";
-import { HeatmapLayer } from "react-leaflet-heatmap-layer-v3";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css";
