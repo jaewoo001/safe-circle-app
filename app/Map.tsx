@@ -6,52 +6,63 @@ import { LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet-defaulticon-compatibility/dist/leaflet-defaulticon-compatibility.css";
 import "leaflet-defaulticon-compatibility";
-import { supabase } from "./supabase"; // Import the connection!
+import { supabase } from "./supabase";
 
-// 1. A Helper Component to detect clicks
+// Helper component to handle clicks
 function MapClickHandler({ onMapClick }: { onMapClick: (e: any) => void }) {
   useMapEvents({
-    click: (e) => {
-      onMapClick(e);
-    },
+    click: (e) => onMapClick(e),
   });
   return null;
 }
 
 export default function Map() {
-  const [cautions, setCautions] = useState<any[]>([]); // Store the pins
+  const [cautions, setCautions] = useState<any[]>([]);
   const startPosition: LatLngExpression = [1.3483, 103.6831]; // NTU
 
-  // 2. Fetch existing pins from Supabase when the map loads
+  // 1. Fetch from our new "Readable" View
   useEffect(() => {
     const fetchCautions = async () => {
-      const { data, error } = await supabase.from('map_cautions').select('*');
-      if (data) setCautions(data);
+      // NOTE: We are fetching from 'map_cautions_readable' now!
+      const { data, error } = await supabase
+        .from('map_cautions_readable')
+        .select('*');
+      
+      if (error) console.error("Error:", error);
+      else {
+        console.log("Clean Data:", data); // Check console!
+        setCautions(data || []);
+      }
     };
     fetchCautions();
   }, []);
 
-  // 3. Function to add a new pin
+  // 2. Add new pin (Still inserts into the ORIGINAL table)
   const handleAddPin = async (e: any) => {
     const { lat, lng } = e.latlng;
-    const description = prompt("What's the caution here? (e.g. Slippery Floor)");
+    const description = prompt("What's the caution here?");
 
     if (description) {
-      // Save to Database
-      const { data, error } = await supabase
+      // We insert into the MAIN table
+      const { error } = await supabase
         .from('map_cautions')
         .insert([
           { 
-            location: `POINT(${lng} ${lat})`, // PostGIS format
+            location: `POINT(${lng} ${lat})`, 
             description: description,
             type: 'hazard' 
           }
-        ])
-        .select();
+        ]);
 
-      if (data) {
-        // Update the map instantly
-        setCautions([...cautions, ...data]); 
+      if (!error) {
+        // Optimistically add the pin to the map immediately
+        // (So we don't have to wait for a refresh)
+        setCautions([...cautions, { 
+          id: Date.now(), 
+          lat: lat, 
+          lng: lng, 
+          description: description 
+        }]); 
       }
     }
   };
@@ -60,6 +71,7 @@ export default function Map() {
     <MapContainer 
       center={startPosition} 
       zoom={16} 
+      scrollWheelZoom={true} 
       style={{ height: "100%", width: "100%" }}
     >
       <TileLayer
@@ -67,15 +79,18 @@ export default function Map() {
         attribution='&copy; OpenStreetMap contributors'
       />
       
-      {/* This invisible component listens for clicks */}
       <MapClickHandler onMapClick={handleAddPin} />
 
-      {/* Render all the cautions from the database */}
       {cautions.map((caution) => (
-        // Note: You'll need to parse the POINT() string to [lat, lng]
-        // For now, let's just log it to see if it works
-        <Marker key={caution.id} position={startPosition}> 
-          <Popup>{caution.description}</Popup>
+        <Marker 
+          key={caution.id} 
+          // Use the clean 'lat' and 'lng' from the database view
+          position={[caution.lat, caution.lng]}
+        >
+          <Popup>
+            <strong>Caution!</strong> <br/>
+            {caution.description}
+          </Popup>
         </Marker>
       ))}
     </MapContainer>
